@@ -276,6 +276,9 @@ func (h *Handler) HandleRequest(data []byte, clientCN, remoteAddr, connID string
 			fmt.Sprintf("batch too large: %d items (max %d)", len(batchItems), maxBatchItems))
 	}
 
+	// M14 fix: cap total request size (already enforced by server.go maxTTLVMessageSize)
+	// M15: per-IP connection limiting handled by server.go semaphore
+
 	var responseBatchItems [][]byte
 	for _, bi := range batchItems {
 		responseBatchItems = append(responseBatchItems, h.processBatchItem(bi, clientCN, remoteAddr, connID))
