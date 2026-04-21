@@ -1,10 +1,10 @@
 # Cyphera Open KMIP Server
 
-> **Alpha** — this project is under active development. APIs may change. Not yet recommended for production use with sensitive key material.
+> **Alpha** — under active development. APIs may change.
 
 Open-source KMIP 1.4 key management server for developers. Create keys, manage lifecycle, run server-side crypto, and connect any KMIP client — without fighting enterprise KMS platforms.
 
-Works standalone or paired with [Cyphera Open PKI Server](https://github.com/cyphera-labs/open-pki-server) for mTLS certificate management.
+Works standalone or paired with [Cyphera Open PKI Server](https://github.com/cyphera-labs/open-pki-server) for mTLS certificate lifecycle.
 
 ## What it does
 
