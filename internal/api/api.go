@@ -273,11 +273,14 @@ func (a *API) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		a.handleCreateKeyPair(w, r, req.Name, keyType, req.Length)
 	default:
 		algo := resolveAlgorithm(req.Algorithm)
+		if algo < 0 {
+			a.writeError(w, http.StatusBadRequest, "unsupported algorithm")
+			return
+		}
 		length := req.Length
 		if length == 0 {
 			length = 256
 		}
-		// Owner = API client identity (for now just "rest")
 		rec, err := a.store.Create(req.Name, algo, length, kmiplib.UsageMaskEncrypt|kmiplib.UsageMaskDecrypt, "rest")
 		if err != nil {
 			a.logAudit(r, "CreateKey", "", req.Name, "failure", err.Error())
@@ -614,6 +617,10 @@ func (a *API) handleUnwrapKey(w http.ResponseWriter, r *http.Request) {
 		name = "unwrapped-key"
 	}
 	algo := resolveAlgorithm(req.Algorithm)
+	if algo < 0 {
+		a.writeError(w, http.StatusBadRequest, "unsupported algorithm")
+		return
+	}
 	length := req.Length
 	if length == 0 {
 		length = int32(len(keyMaterial) * 8)

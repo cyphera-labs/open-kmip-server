@@ -1,6 +1,6 @@
 # Cyphera Open KMIP Server
 
-> **Alpha software.** Not audited. Not production KMS infrastructure. Intended for development, testing, homelabs, education, demos, and early feedback.
+> **Alpha software. Development and test use only.** This release is not audited and is not suitable for production key custody. Secret material is currently stored unwrapped in SQLite. Do not expose this service to untrusted networks unless you provide your own certs, CA, and API key.
 
 Open-source KMIP 1.4 key management server for developers. Create keys, manage lifecycle, run server-side crypto, and connect KMIP clients — without fighting enterprise KMS platforms.
 
@@ -106,7 +106,7 @@ open-kmip \
 
 ## KMIP Protocol
 
-Implements KMIP 1.4 operation handlers over TTLV binary encoding. Compatibility testing is ongoing.
+Implements a growing subset of KMIP 1.4 over TTLV binary encoding. Third-party interoperability is preliminary — only operations covered by the test suite should be treated as compatibility targets for this alpha.
 
 Create, CreateKeyPair, Register, ReKey, DeriveKey, Locate, Check, Get, GetAttributes, GetAttributeList, AddAttribute, ModifyAttribute, DeleteAttribute, ObtainLease, Activate, Revoke, Destroy, Archive, Recover, Query, Poll, DiscoverVersions, Encrypt, Decrypt, Sign, SignatureVerify, MAC
 
