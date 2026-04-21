@@ -152,8 +152,15 @@ func (a *API) Serve(addr string) error {
 	mux.HandleFunc("GET /v1/status", a.auth(a.handleStatus))
 	mux.HandleFunc("GET /v1/audit", a.auth(a.handleAuditLog))
 	mux.HandleFunc("GET /v1/inventory", a.auth(a.handleInventory))
-	mux.HandleFunc("GET /metrics", a.handleMetrics)
-	mux.Handle("/ui/", http.StripPrefix("/ui", dashboard.Handler()))
+	mux.HandleFunc("GET /metrics", a.handleMetrics) // public for Prometheus scraping
+	// Dashboard auth-protected when API key is set
+	if a.apiKey != "" {
+		mux.HandleFunc("/ui/", a.auth(func(w http.ResponseWriter, r *http.Request) {
+			http.StripPrefix("/ui", dashboard.Handler()).ServeHTTP(w, r)
+		}))
+	} else {
+		mux.Handle("/ui/", http.StripPrefix("/ui", dashboard.Handler()))
+	}
 
 	handler := a.rateLimitMiddleware(a.limitBodyMiddleware(a.corsMiddleware(mux)))
 

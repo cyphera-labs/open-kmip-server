@@ -1,4 +1,257 @@
 <!DOCTYPE html>
-<html><head><title>Cyphera Open KMIP Server</title></head>
-<body><h1>Open KMIP Server</h1><p>Dashboard coming soon.</p></body>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cyphera Open KMIP Server</title>
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar">
+    <div class="logo">
+      <h1>Open KMIP</h1>
+      <span>Cyphera Labs</span>
+    </div>
+    <nav>
+      <a href="#" data-page="overview" class="active">Overview</a>
+      <a href="#" data-page="keys">Keys</a>
+      <a href="#" data-page="connections">Connections</a>
+      <a href="#" data-page="audit">Audit Log</a>
+    </nav>
+  </div>
+  <div class="main">
+
+    <!-- Overview -->
+    <div id="page-overview" class="page active">
+      <h2>Overview</h2>
+      <div class="stats" id="stats"></div>
+      <div class="section">
+        <h3 style="margin-bottom:12px">Recent Activity</h3>
+        <div id="recent-audit"></div>
+      </div>
+    </div>
+
+    <!-- Keys -->
+    <div id="page-keys" class="page">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2>Managed Keys</h2>
+        <button class="btn btn-primary btn-sm" onclick="showCreateKey()">Create Key</button>
+      </div>
+      <div class="filter-tabs">
+        <button class="btn btn-sm" style="background:var(--surface2);color:var(--text)" onclick="loadKeys()">All</button>
+        <button class="btn btn-sm" style="background:rgba(99,102,241,0.15);color:var(--accent2)" onclick="loadKeys('pre-active')">Pre-Active</button>
+        <button class="btn btn-sm" style="background:rgba(34,197,94,0.15);color:var(--green)" onclick="loadKeys('active')">Active</button>
+        <button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:var(--red)" onclick="loadKeys('compromised')">Revoked</button>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>UID</th><th>Algorithm</th><th>Length</th><th>State</th><th>Created</th><th></th></tr></thead>
+        <tbody id="key-table"></tbody>
+      </table>
+    </div>
+
+    <!-- Key Detail -->
+    <div id="page-key-detail" class="page">
+      <h2>Key Detail</h2>
+      <div id="key-detail-content"></div>
+    </div>
+
+    <!-- Create Key -->
+    <div id="page-create-key" class="page">
+      <h2>Create Key</h2>
+      <div class="detail">
+        <div class="detail-grid" style="max-width:400px">
+          <div class="label">Name</div><div><input id="ck-name" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;width:100%" placeholder="my-aes-key"></div>
+          <div class="label">Algorithm</div><div><select id="ck-algo" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px"><option value="AES">AES</option><option value="CHACHA20">ChaCha20</option></select></div>
+          <div class="label">Length</div><div><select id="ck-length" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px"><option value="128">128</option><option value="256" selected>256</option></select></div>
+        </div>
+        <div style="margin-top:16px">
+          <button class="btn btn-primary" onclick="createKey()">Create</button>
+          <button class="btn btn-sm" style="background:var(--surface2);color:var(--text);margin-left:8px" onclick="showPage('keys')">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connections -->
+    <div id="page-connections" class="page">
+      <h2>Active Connections</h2>
+      <table>
+        <thead><tr><th>Client CN</th><th>Remote Address</th><th>Connected</th><th>Operations</th><th>Last Op</th></tr></thead>
+        <tbody id="conn-table"></tbody>
+      </table>
+    </div>
+
+    <!-- Audit -->
+    <div id="page-audit" class="page">
+      <h2>Audit Log</h2>
+      <div id="audit-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_KEY = new URLSearchParams(window.location.search).get('key') || '';
+const headers = API_KEY ? {'Authorization': `Bearer ${API_KEY}`} : {};
+
+async function api(path) {
+  const r = await fetch(path, {headers});
+  return r.json();
+}
+async function apiPost(path, body) {
+  const r = await fetch(path, {method:'POST', headers:{...headers,'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  return r.json();
+}
+
+const algoName = {3:'AES',4:'RSA',6:'ECDSA',0x1E:'ChaCha20'};
+
+// Nav
+document.querySelectorAll('[data-page]').forEach(a => {
+  a.addEventListener('click', e => { e.preventDefault(); showPage(a.dataset.page); });
+});
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('[data-page]').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelector('[data-page="'+name+'"]')?.classList.add('active');
+  if(name==='overview') loadOverview();
+  if(name==='keys') loadKeys();
+  if(name==='connections') loadConnections();
+  if(name==='audit') loadAudit();
+}
+
+// Overview
+async function loadOverview() {
+  const s = await api('/v1/status');
+  const k = s.keys || {};
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="label">Total Keys</div><div class="value">${k.total||0}</div></div>
+    <div class="stat"><div class="label">Active</div><div class="value green">${k.active||0}</div></div>
+    <div class="stat"><div class="label">Pre-Active</div><div class="value">${k.pre_active||0}</div></div>
+    <div class="stat"><div class="label">Revoked</div><div class="value red">${k.compromised||0}</div></div>
+    <div class="stat"><div class="label">Connections</div><div class="value">${s.connections||0}</div></div>
+    <div class="stat"><div class="label">Uptime</div><div class="value">${Math.floor((s.uptime_seconds||0)/60)}m</div></div>
+  `;
+  const audit = await api('/v1/audit?limit=10');
+  const entries = audit.entries || [];
+  document.getElementById('recent-audit').innerHTML = entries.map(e => `
+    <div class="audit-entry">
+      <span class="audit-action">${e.operation}</span>
+      <span class="mono" style="margin-left:8px">${e.object_uid||''}</span>
+      <span class="badge badge-${e.status==='success'?'active':'revoked'}" style="margin-left:8px">${e.status}</span>
+      <div class="audit-details">${e.source} — ${e.client_id||'anonymous'} — ${e.remote_addr||''}</div>
+    </div>
+  `).join('') || '<div class="loading">No events yet</div>';
+}
+
+// Keys
+async function loadKeys(stateFilter) {
+  const data = await api('/v1/keys');
+  let keys = data.keys || [];
+  if(stateFilter) keys = keys.filter(k => k.state === stateFilter);
+  document.getElementById('key-table').innerHTML = keys.map(k => `
+    <tr>
+      <td><a href="#" onclick="showKeyDetail('${k.uid}');return false">${k.name||'(unnamed)'}</a></td>
+      <td class="mono truncate">${k.uid}</td>
+      <td>${algoName[k.algorithm]||k.algorithm}</td>
+      <td>${k.length}</td>
+      <td><span class="badge badge-${k.state}">${k.state}</span></td>
+      <td class="mono">${(k.created_at||'').split('T')[0]}</td>
+      <td>
+        ${k.state==='pre-active'?`<button class="btn btn-primary btn-sm" onclick="activateKey('${k.uid}')">Activate</button>`:''}
+        ${k.state==='active'?`<button class="btn btn-danger btn-sm" onclick="revokeKey('${k.uid}')">Revoke</button>`:''}
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="7" class="loading">No keys</td></tr>';
+}
+
+async function showKeyDetail(uid) {
+  const k = await api('/v1/keys/'+uid);
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-key-detail').classList.add('active');
+  document.getElementById('key-detail-content').innerHTML = `
+    <div class="detail">
+      <h3>${k.name||'(unnamed)'}</h3>
+      <div class="detail-grid">
+        <div class="label">UID</div><div class="val mono">${k.uid}</div>
+        <div class="label">Algorithm</div><div class="val">${algoName[k.algorithm]||k.algorithm}</div>
+        <div class="label">Length</div><div class="val">${k.length} bits</div>
+        <div class="label">State</div><div class="val"><span class="badge badge-${k.state}">${k.state}</span></div>
+        <div class="label">Object Type</div><div class="val">${k.object_type===2?'Symmetric Key':k.object_type===3?'Public Key':k.object_type===4?'Private Key':'Type '+k.object_type}</div>
+        <div class="label">Usage Mask</div><div class="val mono">0x${(k.usage_mask||0).toString(16).padStart(8,'0')}</div>
+        <div class="label">Created</div><div class="val mono">${k.created_at||''}</div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        ${k.state==='pre-active'?'<button class="btn btn-primary btn-sm" onclick="activateKey(\''+k.uid+'\')">Activate</button>':''}
+        ${k.state==='active'?'<button class="btn btn-danger btn-sm" onclick="revokeKey(\''+k.uid+'\')">Revoke</button>':''}
+        <button class="btn btn-sm" style="background:var(--surface2);color:var(--text)" onclick="showPage('keys')">Back</button>
+      </div>
+    </div>
+  `;
+}
+
+function showCreateKey() {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-create-key').classList.add('active');
+}
+
+async function createKey() {
+  const name = document.getElementById('ck-name').value;
+  const algo = document.getElementById('ck-algo').value;
+  const length = parseInt(document.getElementById('ck-length').value);
+  if(!name) { alert('Name required'); return; }
+  const result = await apiPost('/v1/keys', {name, algorithm:algo, length});
+  if(result.uid) {
+    showKeyDetail(result.uid);
+  } else {
+    alert(result.error || 'Failed');
+  }
+}
+
+async function activateKey(uid) {
+  await apiPost('/v1/keys/'+uid+'/activate', {});
+  loadKeys();
+}
+
+async function revokeKey(uid) {
+  if(!confirm('Revoke key '+uid+'?')) return;
+  await apiPost('/v1/keys/'+uid+'/revoke', {reason:1});
+  loadKeys();
+}
+
+// Connections
+async function loadConnections() {
+  const data = await api('/v1/connections');
+  const conns = data.connections || [];
+  document.getElementById('conn-table').innerHTML = conns.map(c => `
+    <tr>
+      <td>${c.client_cn||'unknown'}</td>
+      <td class="mono">${c.remote_addr}</td>
+      <td class="mono">${(c.connected_at||'').replace('T',' ').split('.')[0]}</td>
+      <td>${c.operations}</td>
+      <td>${c.last_op||''}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" class="loading">No active connections</td></tr>';
+}
+
+// Audit
+async function loadAudit() {
+  const data = await api('/v1/audit?limit=100');
+  const entries = data.entries || [];
+  document.getElementById('audit-list').innerHTML = entries.map(e => `
+    <div class="audit-entry">
+      <div>
+        <span class="audit-action">${e.operation}</span>
+        <span class="mono" style="margin-left:8px">${e.object_uid||''}</span>
+        <span class="badge badge-${e.status==='success'?'active':'revoked'}" style="margin-left:8px;font-size:10px">${e.status}</span>
+        <span class="audit-time" style="float:right">${(e.timestamp||'').replace('T',' ').split('.')[0]}</span>
+      </div>
+      <div class="audit-details">${e.source} — ${e.client_id||'anonymous'} — ${e.message||''}</div>
+    </div>
+  `).join('') || '<div class="loading">No audit events</div>';
+}
+
+// Init
+loadOverview();
+</script>
+</body>
 </html>
