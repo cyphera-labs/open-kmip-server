@@ -1,14 +1,14 @@
 # Cyphera Open KMIP Server
 
-> **Alpha** — under active development. APIs may change.
+> **Alpha software.** Not audited. Not production KMS infrastructure. Intended for development, testing, homelabs, education, demos, and early feedback.
 
-Open-source KMIP 1.4 key management server for developers. Create keys, manage lifecycle, run server-side crypto, and connect any KMIP client — without fighting enterprise KMS platforms.
+Open-source KMIP 1.4 key management server for developers. Create keys, manage lifecycle, run server-side crypto, and connect KMIP clients — without fighting enterprise KMS platforms.
 
 Works standalone or paired with [Cyphera Open PKI Server](https://github.com/cyphera-labs/open-pki-server) for mTLS certificate lifecycle.
 
 ## What it does
 
-- KMIP 1.4 protocol with all 27 operations over mTLS
+- KMIP 1.4 protocol over mTLS — implements core and extended operation handlers
 - REST API for key management, crypto operations, and audit
 - Server-side AES-GCM encrypt/decrypt, RSA/ECDSA sign/verify, HMAC, key wrapping
 - Key lifecycle: create, activate, revoke, destroy, rekey, archive, recover
@@ -106,7 +106,7 @@ open-kmip \
 
 ## KMIP Protocol
 
-All 27 KMIP 1.4 operations over TTLV binary encoding:
+Implements KMIP 1.4 operation handlers over TTLV binary encoding. Compatibility testing is ongoing.
 
 Create, CreateKeyPair, Register, ReKey, DeriveKey, Locate, Check, Get, GetAttributes, GetAttributeList, AddAttribute, ModifyAttribute, DeleteAttribute, ObtainLease, Activate, Revoke, Destroy, Archive, Recover, Query, Poll, DiscoverVersions, Encrypt, Decrypt, Sign, SignatureVerify, MAC
 
@@ -114,7 +114,7 @@ Create, CreateKeyPair, Register, ReKey, DeriveKey, Locate, Check, Get, GetAttrib
 
 - [Cyphera KMIP clients](https://github.com/cyphera-labs) — Go, Java, Python, Node.js, Rust, .NET, PHP, Ruby, Swift
 - PyKMIP
-- Any KMIP 1.4 compliant client
+- Other KMIP 1.4 clients (compatibility testing ongoing)
 
 ## Configuration
 
