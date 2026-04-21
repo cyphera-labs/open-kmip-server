@@ -107,6 +107,8 @@ func (a *API) Serve(addr string) error {
 	mux.HandleFunc("GET /v1/connections", a.auth(a.handleConnections))
 	mux.HandleFunc("GET /v1/status", a.auth(a.handleStatus))
 	mux.HandleFunc("GET /v1/audit", a.auth(a.handleAuditLog))
+	mux.HandleFunc("GET /v1/inventory", a.auth(a.handleInventory))
+	mux.HandleFunc("GET /metrics", a.handleMetrics)
 	mux.Handle("/ui/", http.StripPrefix("/ui", dashboard.Handler()))
 
 	handler := a.limitBodyMiddleware(a.corsMiddleware(mux))
@@ -762,6 +764,55 @@ func (a *API) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- Helpers ---
+
+func (a *API) handleInventory(w http.ResponseWriter, r *http.Request) {
+	sqlStore, ok := a.store.(*storage.SQLiteStore)
+	if !ok {
+		a.writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	views, err := sqlStore.ListInventory()
+	if err != nil {
+		a.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	a.writeJSON(w, http.StatusOK, views)
+}
+
+func (a *API) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	records := a.store.List()
+	active, revoked, preActive := 0, 0, 0
+	for _, rec := range records {
+		switch rec.State {
+		case storage.StateActive:
+			active++
+		case storage.StateCompromised:
+			revoked++
+		case storage.StatePreActive:
+			preActive++
+		}
+	}
+	connCount := 0
+	if a.tracker != nil {
+		connCount = a.tracker.Count()
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprintf(w, "# HELP open_kmip_keys_total Total managed keys\n")
+	fmt.Fprintf(w, "# TYPE open_kmip_keys_total gauge\n")
+	fmt.Fprintf(w, "open_kmip_keys_total %d\n", len(records))
+	fmt.Fprintf(w, "# HELP open_kmip_keys_active Active keys\n")
+	fmt.Fprintf(w, "# TYPE open_kmip_keys_active gauge\n")
+	fmt.Fprintf(w, "open_kmip_keys_active %d\n", active)
+	fmt.Fprintf(w, "# HELP open_kmip_keys_pre_active Pre-active keys\n")
+	fmt.Fprintf(w, "# TYPE open_kmip_keys_pre_active gauge\n")
+	fmt.Fprintf(w, "open_kmip_keys_pre_active %d\n", preActive)
+	fmt.Fprintf(w, "# HELP open_kmip_keys_revoked Revoked keys\n")
+	fmt.Fprintf(w, "# TYPE open_kmip_keys_revoked gauge\n")
+	fmt.Fprintf(w, "open_kmip_keys_revoked %d\n", revoked)
+	fmt.Fprintf(w, "# HELP open_kmip_connections_active Active KMIP connections\n")
+	fmt.Fprintf(w, "# TYPE open_kmip_connections_active gauge\n")
+	fmt.Fprintf(w, "open_kmip_connections_active %d\n", connCount)
+}
 
 func (a *API) writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")

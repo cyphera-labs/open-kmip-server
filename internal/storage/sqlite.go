@@ -41,6 +41,64 @@ CREATE TABLE IF NOT EXISTS key_attributes (
     PRIMARY KEY (uid, attr_name),
     FOREIGN KEY (uid) REFERENCES keys(uid)
 );
+
+-- Asset graph (shared Cyphera inventory model — matches Open PKI Server)
+CREATE TABLE IF NOT EXISTS assets (
+    id         TEXT PRIMARY KEY,
+    asset_type TEXT NOT NULL,
+    native_id  TEXT NOT NULL,
+    source     TEXT NOT NULL DEFAULT 'open-kmip-server',
+    name       TEXT NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS asset_metadata (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id   TEXT NOT NULL REFERENCES assets(id),
+    key        TEXT NOT NULL,
+    value      TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(asset_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS asset_tags (
+    asset_id TEXT NOT NULL REFERENCES assets(id),
+    tag_id   INTEGER NOT NULL REFERENCES tags(id),
+    PRIMARY KEY(asset_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS asset_relationships (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_asset_id     TEXT NOT NULL REFERENCES assets(id),
+    relationship_type TEXT NOT NULL,
+    to_asset_id       TEXT NOT NULL,
+    metadata_json     TEXT NOT NULL DEFAULT '{}',
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS asset_lifecycle_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id     TEXT NOT NULL,
+    event_type   TEXT NOT NULL,
+    actor        TEXT NOT NULL DEFAULT 'system',
+    timestamp    TEXT NOT NULL DEFAULT (datetime('now')),
+    result       TEXT NOT NULL DEFAULT 'success',
+    details_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(asset_type);
+CREATE INDEX IF NOT EXISTS idx_asset_metadata_asset ON asset_metadata(asset_id);
+CREATE INDEX IF NOT EXISTS idx_asset_relationships_from ON asset_relationships(from_asset_id);
+CREATE INDEX IF NOT EXISTS idx_asset_lifecycle_asset ON asset_lifecycle_events(asset_id);
 `
 // TODO: C8 — Key material is stored as plaintext BLOB. Implement envelope encryption
 // (AES-256-GCM wrapping with KEK from HSM/KMS/file) before production deployment.
