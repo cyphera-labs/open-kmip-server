@@ -167,7 +167,7 @@ func (a *API) Serve(addr string) error {
 	a.dashAuth.RegisterRoutes(mux)
 
 	// Dashboard static files (public — JS handles showing login screen)
-	mux.Handle("/ui/", http.StripPrefix("/ui", dashboard.Handler()))
+	mux.Handle("/", dashboard.Handler())
 
 	handler := a.rateLimitMiddleware(a.limitBodyMiddleware(a.corsMiddleware(mux)))
 
