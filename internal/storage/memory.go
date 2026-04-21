@@ -146,7 +146,9 @@ func (m *MemoryStore) Rekey(uid string) (*KeyRecord, error) {
 		return nil, fmt.Errorf("invalid key length: %d", rec.Length)
 	}
 	keyBytes := make([]byte, rec.Length/8)
-	rand.Read(keyBytes)
+	if _, err := rand.Read(keyBytes); err != nil {
+		return nil, fmt.Errorf("generate key material: %w", err)
+	}
 	rec.Material = keyBytes
 	rec.Version++
 	return rec, nil
@@ -188,7 +190,9 @@ func (m *MemoryStore) DeriveKey(sourceUID string, derivationData []byte, name st
 	}
 	hkdfReader := hkdf.New(sha256.New, src.Material, derivationData, []byte("kmip-derive"))
 	derived := make([]byte, keyLen)
-	io.ReadFull(hkdfReader, derived)
+	if _, err := io.ReadFull(hkdfReader, derived); err != nil {
+		return nil, fmt.Errorf("HKDF derivation failed: %w", err)
+	}
 
 	rec := &KeyRecord{
 		UID: uuid.New().String(), Name: name, ObjectType: 0x00000002, Algorithm: src.Algorithm,

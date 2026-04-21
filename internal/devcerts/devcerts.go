@@ -32,6 +32,7 @@ func Generate(dir string) (*Certs, error) {
 		return nil, fmt.Errorf("create cert directory: %w", err)
 	}
 
+	// CA
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("generate CA key: %w", err)
@@ -49,12 +50,21 @@ func Generate(dir string) (*Certs, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create CA cert: %w", err)
 	}
-	caCert, _ := x509.ParseCertificate(caCertDER)
+	caCert, err := x509.ParseCertificate(caCertDER)
+	if err != nil {
+		return nil, fmt.Errorf("parse CA cert: %w", err)
+	}
 
 	caCertPath := filepath.Join(dir, "ca.pem")
-	writePEM(caCertPath, "CERTIFICATE", caCertDER)
+	if err := writePEM(caCertPath, "CERTIFICATE", caCertDER); err != nil {
+		return nil, err
+	}
 
-	serverKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	// Server
+	serverKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("generate server key: %w", err)
+	}
 	serverTemplate := &x509.Certificate{
 		SerialNumber: big.NewInt(2),
 		Subject:      pkix.Name{CommonName: "localhost"},
@@ -65,15 +75,29 @@ func Generate(dir string) (*Certs, error) {
 		DNSNames:     []string{"localhost", "kmip-server"},
 		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("0.0.0.0")},
 	}
-	serverCertDER, _ := x509.CreateCertificate(rand.Reader, serverTemplate, caCert, &serverKey.PublicKey, caKey)
+	serverCertDER, err := x509.CreateCertificate(rand.Reader, serverTemplate, caCert, &serverKey.PublicKey, caKey)
+	if err != nil {
+		return nil, fmt.Errorf("create server cert: %w", err)
+	}
 
 	serverCertPath := filepath.Join(dir, "server.pem")
-	writePEM(serverCertPath, "CERTIFICATE", serverCertDER)
+	if err := writePEM(serverCertPath, "CERTIFICATE", serverCertDER); err != nil {
+		return nil, err
+	}
 	serverKeyPath := filepath.Join(dir, "server-key.pem")
-	serverKeyDER, _ := x509.MarshalECPrivateKey(serverKey)
-	writePEM(serverKeyPath, "EC PRIVATE KEY", serverKeyDER)
+	serverKeyDER, err := x509.MarshalECPrivateKey(serverKey)
+	if err != nil {
+		return nil, fmt.Errorf("marshal server key: %w", err)
+	}
+	if err := writePEM(serverKeyPath, "EC PRIVATE KEY", serverKeyDER); err != nil {
+		return nil, err
+	}
 
-	clientKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	// Client
+	clientKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("generate client key: %w", err)
+	}
 	clientTemplate := &x509.Certificate{
 		SerialNumber: big.NewInt(3),
 		Subject:      pkix.Name{CommonName: "dev-client"},
@@ -82,16 +106,29 @@ func Generate(dir string) (*Certs, error) {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	clientCertDER, _ := x509.CreateCertificate(rand.Reader, clientTemplate, caCert, &clientKey.PublicKey, caKey)
+	clientCertDER, err := x509.CreateCertificate(rand.Reader, clientTemplate, caCert, &clientKey.PublicKey, caKey)
+	if err != nil {
+		return nil, fmt.Errorf("create client cert: %w", err)
+	}
 
 	clientCertPath := filepath.Join(dir, "client.pem")
-	writePEM(clientCertPath, "CERTIFICATE", clientCertDER)
+	if err := writePEM(clientCertPath, "CERTIFICATE", clientCertDER); err != nil {
+		return nil, err
+	}
 	clientKeyPath := filepath.Join(dir, "client-key.pem")
-	clientKeyDER, _ := x509.MarshalECPrivateKey(clientKey)
-	writePEM(clientKeyPath, "EC PRIVATE KEY", clientKeyDER)
+	clientKeyDER, err := x509.MarshalECPrivateKey(clientKey)
+	if err != nil {
+		return nil, fmt.Errorf("marshal client key: %w", err)
+	}
+	if err := writePEM(clientKeyPath, "EC PRIVATE KEY", clientKeyDER); err != nil {
+		return nil, err
+	}
 
+	// API key
 	apiKeyBytes := make([]byte, 24)
-	rand.Read(apiKeyBytes)
+	if _, err := rand.Read(apiKeyBytes); err != nil {
+		return nil, fmt.Errorf("generate API key: %w", err)
+	}
 
 	return &Certs{
 		CACert:     caCertPath,
