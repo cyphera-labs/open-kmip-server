@@ -1,0 +1,23 @@
+# Binaries
+/open-kmip
+/open-kmip-server
+*.exe
+
+# Database
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Certs
+*.pem
+*.key
+*.p12
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
