@@ -106,11 +106,12 @@ func (m *MemoryStore) Destroy(uid string) error {
 }
 
 func (m *MemoryStore) Register(rec *KeyRecord) (*KeyRecord, error) {
+	if rec.ObjectType != 0x00000001 && rec.Length < 0 {
+		return nil, fmt.Errorf("invalid key length: %d", rec.Length)
+	}
 	rec.UID = uuid.New().String()
 	rec.CreatedAt = time.Now()
-	if rec.State == 0 {
-		rec.State = StatePreActive
-	}
+	rec.State = StatePreActive
 	if rec.Version == 0 {
 		rec.Version = 1
 	}

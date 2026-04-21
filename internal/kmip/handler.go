@@ -269,6 +269,12 @@ func (h *Handler) HandleRequest(data []byte, clientCN, remoteAddr, connID string
 	if len(batchItems) == 0 {
 		return h.buildErrorResponse(0, ReasonInvalidMessage, "no BatchItem in request")
 	}
+	// M1 fix: cap batch size to prevent resource exhaustion
+	const maxBatchItems = 100
+	if len(batchItems) > maxBatchItems {
+		return h.buildErrorResponse(0, ReasonResponseTooLarge,
+			fmt.Sprintf("batch too large: %d items (max %d)", len(batchItems), maxBatchItems))
+	}
 
 	var responseBatchItems [][]byte
 	for _, bi := range batchItems {

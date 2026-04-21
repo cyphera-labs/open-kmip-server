@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	kmiplib "github.com/cyphera-labs/kmip-go"
@@ -34,6 +35,47 @@ import (
 
 const maxRequestBodySize = 1 << 20
 
+// H4 fix: per-IP rate limiter
+type ipRateLimiter struct {
+	mu       sync.Mutex
+	visitors map[string]*rateBucket
+}
+
+type rateBucket struct {
+	tokens   int
+	lastSeen time.Time
+}
+
+func newIPRateLimiter() *ipRateLimiter {
+	return &ipRateLimiter{visitors: make(map[string]*rateBucket)}
+}
+
+func (rl *ipRateLimiter) allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	b, ok := rl.visitors[ip]
+	if !ok {
+		rl.visitors[ip] = &rateBucket{tokens: 99, lastSeen: now} // 100/min, just used 1
+		return true
+	}
+
+	// Refill tokens: 100 per minute
+	elapsed := now.Sub(b.lastSeen).Seconds()
+	b.tokens += int(elapsed * (100.0 / 60.0))
+	if b.tokens > 100 {
+		b.tokens = 100
+	}
+	b.lastSeen = now
+
+	if b.tokens <= 0 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
 // API is the REST API server.
 type API struct {
 	store      storage.Storage
@@ -44,19 +86,21 @@ type API struct {
 	keyFile    string
 	start      time.Time
 	tracker    *kmip.ConnectionTracker
+	rateLimiter *ipRateLimiter
 }
 
 // NewAPI creates a REST API server.
 func NewAPI(store storage.Storage, apiKey, corsOrigin, certFile, keyFile string, auditLog *audit.Logger, tracker *kmip.ConnectionTracker) *API {
 	return &API{
-		store:      store,
-		audit:      auditLog,
-		apiKey:     apiKey,
-		corsOrigin: corsOrigin,
-		certFile:   certFile,
-		keyFile:    keyFile,
-		start:      time.Now(),
-		tracker:    tracker,
+		store:       store,
+		audit:       auditLog,
+		apiKey:      apiKey,
+		corsOrigin:  corsOrigin,
+		certFile:    certFile,
+		keyFile:     keyFile,
+		start:       time.Now(),
+		tracker:     tracker,
+		rateLimiter: newIPRateLimiter(),
 	}
 }
 
@@ -111,7 +155,7 @@ func (a *API) Serve(addr string) error {
 	mux.HandleFunc("GET /metrics", a.handleMetrics)
 	mux.Handle("/ui/", http.StripPrefix("/ui", dashboard.Handler()))
 
-	handler := a.limitBodyMiddleware(a.corsMiddleware(mux))
+	handler := a.rateLimitMiddleware(a.limitBodyMiddleware(a.corsMiddleware(mux)))
 
 	// C5 fix: TLS required — no HTTP fallback
 	if a.certFile == "" || a.keyFile == "" {
@@ -145,6 +189,22 @@ func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+func (a *API) rateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := r.RemoteAddr
+		if idx := strings.LastIndex(ip, ":"); idx != -1 {
+			ip = ip[:idx]
+		}
+		if !a.rateLimiter.allow(ip) {
+			a.logAudit(r, "RATE_LIMITED", "", "", "failure", "too many requests")
+			w.Header().Set("Retry-After", "5")
+			a.writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (a *API) limitBodyMiddleware(next http.Handler) http.Handler {
@@ -693,6 +753,16 @@ func (a *API) handleMACKey(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleRekeyKey(w http.ResponseWriter, r *http.Request) {
 	uid := r.PathValue("uid")
+	// M6 fix: check state before rekey (KMIP spec: only Active keys)
+	existing, ok := a.store.Get(uid)
+	if !ok {
+		a.writeError(w, http.StatusNotFound, "key not found")
+		return
+	}
+	if existing.State != storage.StateActive {
+		a.writeError(w, http.StatusConflict, "key must be Active to rekey")
+		return
+	}
 	rec, err := a.store.Rekey(uid)
 	if err != nil {
 		a.writeError(w, http.StatusNotFound, err.Error())
@@ -716,6 +786,10 @@ func (a *API) handleAuditLog(w http.ResponseWriter, r *http.Request) {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			limit = n
 		}
+	}
+	// M3 fix: cap limit to prevent OOM
+	if limit > 1000 {
+		limit = 1000
 	}
 	if v := r.URL.Query().Get("offset"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {

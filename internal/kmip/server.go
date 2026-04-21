@@ -37,8 +37,9 @@ func NewServer(host string, port int, certFile, keyFile, caFile string, handler 
 	}
 
 	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
+		Certificates:     []tls.Certificate{cert},
+		MinVersion:       tls.VersionTLS12,
+		SessionTicketsDisabled: true, // M4 fix: prevent session resumption bypassing mTLS
 		CipherSuites: []uint16{
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,

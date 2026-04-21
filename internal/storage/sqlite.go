@@ -125,8 +125,10 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("create tables: %w", err)
 	}
 
-	// H2 fix: restrict file permissions
+	// H2 + M7 fix: restrict file permissions on db and WAL files
 	os.Chmod(dbPath, 0600)
+	os.Chmod(dbPath+"-wal", 0600)
+	os.Chmod(dbPath+"-shm", 0600)
 
 	return &SQLiteStore{db: db}, nil
 }
@@ -247,11 +249,16 @@ func (s *SQLiteStore) Destroy(uid string) error {
 }
 
 func (s *SQLiteStore) Register(rec *KeyRecord) (*KeyRecord, error) {
+	// L2/L3 fix: validate length for key types (not certs)
+	if rec.ObjectType != 0x00000001 { // not a certificate
+		if rec.Length < 0 {
+			return nil, fmt.Errorf("invalid key length: %d", rec.Length)
+		}
+	}
+	// L14 fix: ignore caller-supplied state, always start PreActive
 	rec.UID = uuid.New().String()
 	rec.CreatedAt = time.Now()
-	if rec.State == 0 {
-		rec.State = StatePreActive
-	}
+	rec.State = StatePreActive
 	if rec.Version == 0 {
 		rec.Version = 1
 	}
