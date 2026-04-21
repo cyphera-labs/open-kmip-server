@@ -10,7 +10,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/subtle"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -28,6 +27,7 @@ import (
 	kmiplib "github.com/cyphera-labs/kmip-go"
 	"github.com/cyphera-labs/open-kmip-server/internal/audit"
 	"github.com/cyphera-labs/open-kmip-server/internal/dashboard"
+	"github.com/cyphera-labs/open-kmip-server/internal/dashauth"
 	"github.com/cyphera-labs/open-kmip-server/internal/kmip"
 	"github.com/cyphera-labs/open-kmip-server/internal/storage"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -78,19 +78,27 @@ func (rl *ipRateLimiter) allow(ip string) bool {
 
 // API is the REST API server.
 type API struct {
-	store      storage.Storage
-	audit      *audit.Logger
-	apiKey     string
-	corsOrigin string
-	certFile   string
-	keyFile    string
-	start      time.Time
-	tracker    *kmip.ConnectionTracker
+	store       storage.Storage
+	audit       *audit.Logger
+	apiKey      string
+	corsOrigin  string
+	certFile    string
+	keyFile     string
+	start       time.Time
+	tracker     *kmip.ConnectionTracker
 	rateLimiter *ipRateLimiter
+	dashAuth    *dashauth.DashAuth
 }
 
 // NewAPI creates a REST API server.
-func NewAPI(store storage.Storage, apiKey, corsOrigin, certFile, keyFile string, auditLog *audit.Logger, tracker *kmip.ConnectionTracker) *API {
+// devMode=true skips dashboard authentication (--dev flag).
+func NewAPI(store storage.Storage, apiKey, corsOrigin, certFile, keyFile string, auditLog *audit.Logger, tracker *kmip.ConnectionTracker, devMode bool) *API {
+	var da *dashauth.DashAuth
+	if devMode {
+		da = dashauth.NewDevMode()
+	} else {
+		da = dashauth.New(apiKey, true) // KMIP REST always TLS
+	}
 	return &API{
 		store:       store,
 		audit:       auditLog,
@@ -101,6 +109,7 @@ func NewAPI(store storage.Storage, apiKey, corsOrigin, certFile, keyFile string,
 		start:       time.Now(),
 		tracker:     tracker,
 		rateLimiter: newIPRateLimiter(),
+		dashAuth:    da,
 	}
 }
 
@@ -132,28 +141,32 @@ func (a *API) logAudit(r *http.Request, operation, objectUID, objectName, status
 func (a *API) Serve(addr string) error {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /v1/keys", a.auth(a.handleListKeys))
-	mux.HandleFunc("POST /v1/keys", a.auth(a.handleCreateKey))
-	mux.HandleFunc("GET /v1/keys/{uid}", a.auth(a.handleGetKey))
+	mux.HandleFunc("GET /v1/keys", a.dashAuth.RequireAPIAuth(a.handleListKeys))
+	mux.HandleFunc("POST /v1/keys", a.dashAuth.RequireAPIAuth(a.handleCreateKey))
+	mux.HandleFunc("GET /v1/keys/{uid}", a.dashAuth.RequireAPIAuth(a.handleGetKey))
 	// C4 fix: material export endpoint removed
-	mux.HandleFunc("POST /v1/keys/{uid}/activate", a.auth(a.handleActivateKey))
-	mux.HandleFunc("POST /v1/keys/{uid}/revoke", a.auth(a.handleRevokeKey))
-	mux.HandleFunc("DELETE /v1/keys/{uid}", a.auth(a.handleDestroyKey))
-	mux.HandleFunc("POST /v1/keys/{uid}/encrypt", a.auth(a.handleEncryptKey))
-	mux.HandleFunc("POST /v1/keys/{uid}/decrypt", a.auth(a.handleDecryptKey))
-	mux.HandleFunc("POST /v1/keys/{uid}/sign", a.auth(a.handleSignKey))
-	mux.HandleFunc("POST /v1/keys/{uid}/verify", a.auth(a.handleVerifyKey))
-	mux.HandleFunc("POST /v1/keys/{uid}/mac", a.auth(a.handleMACKey))
-	mux.HandleFunc("POST /v1/keys/{uid}/rekey", a.auth(a.handleRekeyKey))
-	mux.HandleFunc("POST /v1/keys/{uid}/wrap", a.auth(a.handleWrapKey))
-	mux.HandleFunc("POST /v1/keys/{uid}/unwrap", a.auth(a.handleUnwrapKey))
-	mux.HandleFunc("POST /v1/certificates", a.auth(a.handleUploadCertificate))
-	mux.HandleFunc("GET /v1/connections", a.auth(a.handleConnections))
-	mux.HandleFunc("GET /v1/status", a.auth(a.handleStatus))
-	mux.HandleFunc("GET /v1/audit", a.auth(a.handleAuditLog))
-	mux.HandleFunc("GET /v1/inventory", a.auth(a.handleInventory))
+	mux.HandleFunc("POST /v1/keys/{uid}/activate", a.dashAuth.RequireAPIAuth(a.handleActivateKey))
+	mux.HandleFunc("POST /v1/keys/{uid}/revoke", a.dashAuth.RequireAPIAuth(a.handleRevokeKey))
+	mux.HandleFunc("DELETE /v1/keys/{uid}", a.dashAuth.RequireAPIAuth(a.handleDestroyKey))
+	mux.HandleFunc("POST /v1/keys/{uid}/encrypt", a.dashAuth.RequireAPIAuth(a.handleEncryptKey))
+	mux.HandleFunc("POST /v1/keys/{uid}/decrypt", a.dashAuth.RequireAPIAuth(a.handleDecryptKey))
+	mux.HandleFunc("POST /v1/keys/{uid}/sign", a.dashAuth.RequireAPIAuth(a.handleSignKey))
+	mux.HandleFunc("POST /v1/keys/{uid}/verify", a.dashAuth.RequireAPIAuth(a.handleVerifyKey))
+	mux.HandleFunc("POST /v1/keys/{uid}/mac", a.dashAuth.RequireAPIAuth(a.handleMACKey))
+	mux.HandleFunc("POST /v1/keys/{uid}/rekey", a.dashAuth.RequireAPIAuth(a.handleRekeyKey))
+	mux.HandleFunc("POST /v1/keys/{uid}/wrap", a.dashAuth.RequireAPIAuth(a.handleWrapKey))
+	mux.HandleFunc("POST /v1/keys/{uid}/unwrap", a.dashAuth.RequireAPIAuth(a.handleUnwrapKey))
+	mux.HandleFunc("POST /v1/certificates", a.dashAuth.RequireAPIAuth(a.handleUploadCertificate))
+	mux.HandleFunc("GET /v1/connections", a.dashAuth.RequireAPIAuth(a.handleConnections))
+	mux.HandleFunc("GET /v1/status", a.dashAuth.RequireAPIAuth(a.handleStatus))
+	mux.HandleFunc("GET /v1/audit", a.dashAuth.RequireAPIAuth(a.handleAuditLog))
+	mux.HandleFunc("GET /v1/inventory", a.dashAuth.RequireAPIAuth(a.handleInventory))
 	mux.HandleFunc("GET /metrics", a.handleMetrics) // public for Prometheus scraping
-	// Dashboard static files are public — API calls require auth via ?key= param
+
+	// Auth endpoints (public — handles login/logout/status)
+	a.dashAuth.RegisterRoutes(mux)
+
+	// Dashboard static files (public — JS handles showing login screen)
 	mux.Handle("/ui/", http.StripPrefix("/ui", dashboard.Handler()))
 
 	handler := a.rateLimitMiddleware(a.limitBodyMiddleware(a.corsMiddleware(mux)))
@@ -166,31 +179,7 @@ func (a *API) Serve(addr string) error {
 	return http.ListenAndServeTLS(addr, a.certFile, a.keyFile, handler)
 }
 
-// C3 fix: auth requires API key when configured — no bypass
-func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if a.apiKey == "" {
-			// H3 note: in production, apiKey is required (enforced in main)
-			next(w, r)
-			return
-		}
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			// H3 fix: log failed auth
-			a.logAudit(r, "AUTHN_FAILURE", "", "", "failure", "missing Authorization header")
-			a.writeError(w, http.StatusUnauthorized, "missing Authorization header")
-			return
-		}
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token == authHeader || subtle.ConstantTimeCompare([]byte(token), []byte(a.apiKey)) != 1 {
-			// H3 fix: log failed auth
-			a.logAudit(r, "AUTHN_FAILURE", "", "", "failure", "invalid API key")
-			a.writeError(w, http.StatusUnauthorized, "invalid API key")
-			return
-		}
-		next(w, r)
-	}
-}
+// auth() replaced by dashauth.RequireAPIAuth — session cookie + Bearer token
 
 func (a *API) rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

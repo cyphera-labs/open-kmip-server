@@ -86,7 +86,7 @@ func main() {
 
 	// Start REST API
 	if *apiPort > 0 {
-		a := api.NewAPI(store, *apiKey, *corsOrigin, *certFile, *keyFile, auditLog, tracker)
+		a := api.NewAPI(store, *apiKey, *corsOrigin, *certFile, *keyFile, auditLog, tracker, *devMode)
 		apiAddr := fmt.Sprintf("%s:%d", *host, *apiPort)
 		go func() {
 			if err := a.Serve(apiAddr); err != nil {
