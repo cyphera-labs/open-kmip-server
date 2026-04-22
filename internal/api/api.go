@@ -421,7 +421,10 @@ func (a *API) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Reason int `json:"reason"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
 	if err := a.store.Revoke(uid, req.Reason); err != nil {
 		a.writeError(w, http.StatusNotFound, err.Error())
 		return
@@ -593,8 +596,16 @@ func (a *API) handleUnwrapKey(w http.ResponseWriter, r *http.Request) {
 		a.writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	wrappedKey, _ := base64.StdEncoding.DecodeString(req.WrappedKey)
-	nonce, _ := hex.DecodeString(req.Nonce)
+	wrappedKey, err := base64.StdEncoding.DecodeString(req.WrappedKey)
+	if err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid base64 wrapped_key")
+		return
+	}
+	nonce, err := hex.DecodeString(req.Nonce)
+	if err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid hex nonce")
+		return
+	}
 
 	wrapRec, ok := a.store.Get(req.WrappingKeyUID)
 	if !ok {
@@ -648,8 +659,15 @@ func (a *API) handleSignKey(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Data string `json:"data"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
-	data, _ := base64.StdEncoding.DecodeString(req.Data)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	data, err := base64.StdEncoding.DecodeString(req.Data)
+	if err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid base64 data")
+		return
+	}
 
 	rec, ok := a.store.Get(uid)
 	if !ok {
@@ -691,9 +709,20 @@ func (a *API) handleVerifyKey(w http.ResponseWriter, r *http.Request) {
 		Data      string `json:"data"`
 		Signature string `json:"signature"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
-	data, _ := base64.StdEncoding.DecodeString(req.Data)
-	sig, _ := base64.StdEncoding.DecodeString(req.Signature)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	data, err := base64.StdEncoding.DecodeString(req.Data)
+	if err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid base64 data")
+		return
+	}
+	sig, err := base64.StdEncoding.DecodeString(req.Signature)
+	if err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid base64 signature")
+		return
+	}
 
 	rec, ok := a.store.Get(uid)
 	if !ok {
@@ -731,8 +760,15 @@ func (a *API) handleMACKey(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Data string `json:"data"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
-	data, _ := base64.StdEncoding.DecodeString(req.Data)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	data, err := base64.StdEncoding.DecodeString(req.Data)
+	if err != nil {
+		a.writeError(w, http.StatusBadRequest, "invalid base64 data")
+		return
+	}
 
 	rec, ok := a.store.Get(uid)
 	if !ok {
