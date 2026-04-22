@@ -62,6 +62,11 @@ func main() {
 	var store storage.Storage
 	var auditLog *audit.Logger
 
+	if *storageType == "memory" && !*devMode {
+		log.Fatal("FATAL: --storage memory disables audit and is only allowed with --dev.\n" +
+			"  Use --storage sqlite for evaluation/alpha use.")
+	}
+
 	switch *storageType {
 	case "memory":
 		store = storage.NewMemoryStore()
@@ -102,8 +107,12 @@ func main() {
 		log.Fatalf("failed to create KMIP server: %v", err)
 	}
 
+	listenerMode := "mTLS"
+	if *insecureNoMTLS {
+		listenerMode = "TLS, client auth disabled"
+	}
 	log.Printf("Cyphera Open KMIP Server")
-	log.Printf("  KMIP:    %s:%d (mTLS)", *host, *port)
+	log.Printf("  KMIP:    %s:%d (%s)", *host, *port, listenerMode)
 	if *apiPort > 0 {
 		log.Printf("  REST:    %s:%d (TLS)", *host, *apiPort)
 	}

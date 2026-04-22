@@ -1,6 +1,6 @@
 # Cyphera Open KMIP Server
 
-> **Alpha software. Development and test use only.** This release is not audited and is not suitable for production key custody. Secret material is currently stored unwrapped in SQLite. Do not expose this service to untrusted networks unless you provide your own certs, CA, and API key.
+> **Alpha software. For development and interoperability evaluation only.** This release is not externally audited and is not suitable for production key custody. Secret material is currently stored unwrapped in SQLite unless you add your own envelope-encryption layer. In normal mode, the KMIP listener requires mTLS and the REST API requires an API key when enabled. Use `--dev` only for local development.
 
 Open-source KMIP 1.4 key management server for developers. Create keys, manage lifecycle, run server-side crypto, and connect KMIP clients — without fighting enterprise KMS platforms.
 
@@ -29,10 +29,11 @@ go install github.com/cyphera-labs/open-kmip-server/cmd/open-kmip@latest
 Or use Docker:
 
 ```bash
-# Dev mode (auto-generates certs, for local testing only)
-docker run -d -p 5696:5696 -p 8200:8200 ghcr.io/cyphera-labs/open-kmip-server
+# Dev mode (local testing only — auto-generates certs)
+docker run -d -p 127.0.0.1:5696:5696 -p 127.0.0.1:8200:8200 \
+  ghcr.io/cyphera-labs/open-kmip-server --dev --db /data/open-kmip.db
 
-# Production mode (provide your own certs and API key)
+# Normal mode (provide your own certs and API key)
 docker run -d -p 5696:5696 -p 8200:8200 \
   -v kmip-data:/data -v "$PWD/certs:/certs:ro" \
   ghcr.io/cyphera-labs/open-kmip-server \
@@ -114,15 +115,15 @@ open-kmip \
 
 ## KMIP Protocol
 
-Implements a growing subset of KMIP 1.4 over TTLV binary encoding. Third-party interoperability is preliminary — only operations covered by the test suite should be treated as compatibility targets for this alpha.
+This server implements an alpha subset of KMIP 1.4 over TTLV. Only operations exercised by the repository test suite should be treated as compatibility targets for this release. Third-party interoperability, including PyKMIP, is preliminary and should be validated in your environment before use.
 
 Create, CreateKeyPair, Register, ReKey, DeriveKey, Locate, Check, Get, GetAttributes, GetAttributeList, AddAttribute, ModifyAttribute, DeleteAttribute, ObtainLease, Activate, Revoke, Destroy, Archive, Recover, Query, Poll, DiscoverVersions, Encrypt, Decrypt, Sign, SignatureVerify, MAC
 
 ### Compatible Clients
 
 - [Cyphera KMIP clients](https://github.com/cyphera-labs) — Go, Java, Python, Node.js, Rust, .NET, PHP, Ruby, Swift
-- PyKMIP
-- Other KMIP 1.4 clients (compatibility testing ongoing)
+- PyKMIP (preliminary — validate in your environment)
+- Other KMIP 1.4 clients (preliminary — validate in your environment)
 
 ## Configuration
 
