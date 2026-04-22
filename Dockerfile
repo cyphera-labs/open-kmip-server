@@ -14,7 +14,7 @@ EXPOSE 5696 8200
 VOLUME /data
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- --no-check-certificate https://localhost:8200/v1/status || exit 1
+  CMD wget -qO- --no-check-certificate https://localhost:8200/healthz || exit 1
 
 ENTRYPOINT ["open-kmip"]
-CMD ["--help"]
+CMD ["--dev", "--db", "/data/open-kmip.db"]

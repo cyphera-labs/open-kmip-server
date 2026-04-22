@@ -29,7 +29,15 @@ go install github.com/cyphera-labs/open-kmip-server/cmd/open-kmip@latest
 Or use Docker:
 
 ```bash
+# Dev mode (auto-generates certs, for local testing only)
 docker run -d -p 5696:5696 -p 8200:8200 ghcr.io/cyphera-labs/open-kmip-server
+
+# Production mode (provide your own certs and API key)
+docker run -d -p 5696:5696 -p 8200:8200 \
+  -v kmip-data:/data -v "$PWD/certs:/certs:ro" \
+  ghcr.io/cyphera-labs/open-kmip-server \
+  --cert /certs/server.pem --key /certs/server-key.pem \
+  --ca /certs/ca.pem --api-key "$KMIP_API_KEY" --db /data/open-kmip.db
 ```
 
 ## Quick Start

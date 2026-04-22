@@ -161,6 +161,7 @@ func (a *API) Serve(addr string) error {
 	mux.HandleFunc("GET /v1/status", a.dashAuth.RequireAPIAuth(a.handleStatus))
 	mux.HandleFunc("GET /v1/audit", a.dashAuth.RequireAPIAuth(a.handleAuditLog))
 	mux.HandleFunc("GET /v1/inventory", a.dashAuth.RequireAPIAuth(a.handleInventory))
+	mux.HandleFunc("GET /healthz", a.handleHealthz) // public health check
 	mux.HandleFunc("GET /metrics", a.handleMetrics) // public for Prometheus scraping
 
 	// Auth endpoints (public — handles login/logout/status)
@@ -848,6 +849,11 @@ func (a *API) handleInventory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.writeJSON(w, http.StatusOK, views)
+}
+
+func (a *API) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (a *API) handleMetrics(w http.ResponseWriter, r *http.Request) {
