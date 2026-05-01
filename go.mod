@@ -6,7 +6,7 @@ require (
 	github.com/cyphera-labs/kmip-go v0.0.1-alpha.4
 	github.com/google/uuid v1.6.0
 	golang.org/x/crypto v0.50.0
-	modernc.org/sqlite v1.49.1
+	modernc.org/sqlite v1.50.0
 )
 
 require (
