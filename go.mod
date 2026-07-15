@@ -3,7 +3,7 @@ module github.com/cyphera-labs/open-kmip-server
 go 1.25.0
 
 require (
-	github.com/cyphera-labs/kmip-go v0.0.1-alpha.4
+	github.com/cyphera-labs/kmip-go v0.0.1-alpha.5
 	github.com/google/uuid v1.6.0
 	golang.org/x/crypto v0.53.0
 	modernc.org/sqlite v1.49.1
